@@ -6,11 +6,19 @@ import requests
 import base64
 import re
 import time
-from io import BytesIO
+import sys
+import types
+
+# --- PATCH FOR STREAMLIT CLOUD: Prevent pyaudioop import ---
+dummy = types.ModuleType("pyaudioop")
+sys.modules["pyaudioop"] = dummy
+# -----------------------------------------------------------
+
 from pydub import AudioSegment
 AudioSegment.converter = "/usr/bin/ffmpeg"
 AudioSegment.ffmpeg = "/usr/bin/ffmpeg"
 AudioSegment.ffprobe = "/usr/bin/ffprobe"
+from io import BytesIO
 
 # -----------------------------------------
 # API CONFIG
