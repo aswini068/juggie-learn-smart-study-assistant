@@ -6,8 +6,11 @@ import requests
 import base64
 import re
 import time
-from pydub import AudioSegment
 from io import BytesIO
+from pydub import AudioSegment
+AudioSegment.converter = "/usr/bin/ffmpeg"
+AudioSegment.ffmpeg = "/usr/bin/ffmpeg"
+AudioSegment.ffprobe = "/usr/bin/ffprobe"
 
 # -----------------------------------------
 # API CONFIG
