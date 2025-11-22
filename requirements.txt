@@ -4,4 +4,3 @@ murf
 requests
 deep-translator
 pydub
-ffmpeg-python
