@@ -13,9 +13,11 @@ import os
 # -----------------------------------------
 # API CONFIG
 # -----------------------------------------
+GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+MURF_API_KEY = st.secrets["MURF_API_KEY"]
 
-genai.configure(api_key="AIzaSyD5dqXE-rMqWA9OeC4k4pH0fAfg1gPzTes")
-murf_client = Murf(api_key="ap2_353f83f1-51b5-421e-b57d-5a817941e293")
+genai.configure(api_key=GEMINI_API_KEY)
+murf_client = Murf(api_key=MURF_API_KEY)
 
 # -----------------------------------------
 # LANGUAGE MAPS
