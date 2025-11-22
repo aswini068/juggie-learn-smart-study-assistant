@@ -7,18 +7,16 @@ import base64
 import re
 import time
 
-# -----------------------------------------
-# LOAD API KEYS FROM STREAMLIT SECRETS
-# -----------------------------------------
+
+# LOAD API KEYS
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 MURF_API_KEY = st.secrets["MURF_API_KEY"]
 
 genai.configure(api_key=GEMINI_API_KEY)
 murf_client = Murf(api_key=MURF_API_KEY)
 
-# -----------------------------------------
+
 # LANGUAGE MAPS
-# -----------------------------------------
 
 voice_map = {
     "English": "en-IN-eashwar",
@@ -51,9 +49,8 @@ word_limit_map = {
     "8": 2500
 }
 
-# -----------------------------------------
+
 # STREAMLIT UI
-# -----------------------------------------
 
 st.set_page_config(page_title="Juggie Learn", layout="wide")
 st.title("📚 Juggie.Learn — AI Study Buddy")
@@ -75,9 +72,7 @@ with right:
 
 submit = st.button("✨ Generate Answer")
 
-# -----------------------------------------
 # GEMINI
-# -----------------------------------------
 
 def ask_gemini(prompt):
     try:
@@ -87,9 +82,7 @@ def ask_gemini(prompt):
     except Exception as e:
         return f"[ERROR] {e}"
 
-# -----------------------------------------
 # TEXT CLEANING
-# -----------------------------------------
 
 def clean_text(text):
     text = text.replace("\n", " ")
@@ -115,9 +108,7 @@ def build_safe_chunks(text, limit=2500):
 
     return chunks
 
-# -----------------------------------------
 # MURF TTS (Single Chunk)
-# -----------------------------------------
 
 def murf_tts_chunk(text, voice_id):
     text = clean_text(text)
@@ -132,22 +123,18 @@ def murf_tts_chunk(text, voice_id):
             audio = requests.get(url, timeout=20).content
             return audio
         except Exception:
-            time.sleep(1)  # retry delay
+            time.sleep(1) 
     return None
 
-# -----------------------------------------
 # AUDIO MERGE WITHOUT FFMPEG (SAFE FOR MP3)
-# -----------------------------------------
 
 def merge_audio_files(audio_list):
     merged = b""
     for audio in audio_list:
-        merged += audio  # simple MP3 frame concatenation
+        merged += audio  
     return merged
 
-# -----------------------------------------
 # MAKE FULL AUDIO (MANY CHUNKS)
-# -----------------------------------------
 
 def make_full_voice(text, voice_id):
     chunks = build_safe_chunks(text)
@@ -166,9 +153,7 @@ def make_full_voice(text, voice_id):
 
     return merge_audio_files(audio_parts)
 
-# -----------------------------------------
 # TRANSLATION
-# -----------------------------------------
 
 def translate(text, lang):
     try:
@@ -178,9 +163,7 @@ def translate(text, lang):
     except:
         return text
 
-# -----------------------------------------
 # MAIN LOGIC
-# -----------------------------------------
 
 if submit:
     if not question:
