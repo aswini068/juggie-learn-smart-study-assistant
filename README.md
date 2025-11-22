@@ -148,6 +148,18 @@ This project encourages accessible education, especially for rural or regional-l
 
 ---
 
+## **MY DEPLOYMENT LINK**
+Click this link to view the deployed project
+https://juggie-learn-smart-study-assistant-jx5pamndmdacb5yqybdzbg.streamlit.app/
+
+## **Result/Output:**
+
+**INPUT SECTION**
+![alt text](<input section.jpeg>)
+
+**OUTPUT SECTION**
+![alt text](<output section.jpeg>)
+
 ## 🛠 **How to Run Locally**
 
 1. Clone the repository:
