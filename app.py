@@ -6,19 +6,9 @@ import requests
 import base64
 import re
 import time
-import sys
-import types
-
-# --- PATCH FOR STREAMLIT CLOUD: Prevent pyaudioop import ---
-dummy = types.ModuleType("pyaudioop")
-sys.modules["pyaudioop"] = dummy
-# -----------------------------------------------------------
-
-from pydub import AudioSegment
-AudioSegment.converter = "/usr/bin/ffmpeg"
-AudioSegment.ffmpeg = "/usr/bin/ffmpeg"
-AudioSegment.ffprobe = "/usr/bin/ffprobe"
-from io import BytesIO
+import subprocess
+import tempfile
+import os
 
 # -----------------------------------------
 # API CONFIG
@@ -99,7 +89,7 @@ def ask_gemini(prompt):
         return f"[ERROR] {e}"
 
 # -----------------------------------------
-# TEXT CLEANING FOR MURF
+# TEXT CLEANING
 # -----------------------------------------
 
 def clean_text(text):
@@ -107,11 +97,9 @@ def clean_text(text):
     text = re.sub(r"\s+", " ", text)
     return text.strip()
 
-# SPLIT BY SENTENCES
 def split_into_sentences(text):
     return re.split(r'(?<=[.!?]) +', text)
 
-# BUILD SAFE CHUNKS (<2500 chars)
 def build_safe_chunks(text, limit=2500):
     sentences = split_into_sentences(text)
     chunks = []
@@ -130,7 +118,7 @@ def build_safe_chunks(text, limit=2500):
     return chunks
 
 # -----------------------------------------
-# MURF TTS - FOR EACH CHUNK
+# MURF TTS (Single Chunk)
 # -----------------------------------------
 
 def murf_tts_chunk(text, voice_id):
@@ -150,29 +138,58 @@ def murf_tts_chunk(text, voice_id):
     return None
 
 # -----------------------------------------
-# FULL AUDIO - MERGED (Option B)
+# AUDIO MERGE USING FFMPEG (NO PYDUB)
+# -----------------------------------------
+
+def merge_audio_files(audio_bytes_list):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        input_files = []
+
+        # Save each chunk to temporary MP3 files
+        for i, audio_bytes in enumerate(audio_bytes_list):
+            path = os.path.join(tmpdir, f"part{i}.mp3")
+            with open(path, "wb") as f:
+                f.write(audio_bytes)
+            input_files.append(path)
+
+        # File list for ffmpeg
+        list_path = os.path.join(tmpdir, "list.txt")
+        with open(list_path, "w") as f:
+            for fpath in input_files:
+                f.write(f"file '{fpath}'\n")
+
+        merged_output = os.path.join(tmpdir, "merged.mp3")
+
+        subprocess.run(
+            ["ffmpeg", "-y", "-f", "concat", "-safe", "0",
+             "-i", list_path, "-acodec", "copy", merged_output],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+
+        with open(merged_output, "rb") as f:
+            return f.read()
+
+# -----------------------------------------
+# make_full_voice (uses Murf + ffmpeg)
 # -----------------------------------------
 
 def make_full_voice(text, voice_id):
-    text = clean_text(text)
     chunks = build_safe_chunks(text)
-
-    final_audio = AudioSegment.empty()
+    audio_parts = []
 
     for i, chunk in enumerate(chunks):
         st.write(f"🔉 Generating voice part {i+1}/{len(chunks)}...")
-
-        audio_bytes = murf_tts_chunk(chunk, voice_id)
-        if not audio_bytes:
+        audio = murf_tts_chunk(chunk, voice_id)
+        if audio:
+            audio_parts.append(audio)
+        else:
             st.error(f"❌ Failed to generate part {i+1}")
-            continue
 
-        part_audio = AudioSegment.from_file(BytesIO(audio_bytes), format="mp3")
-        final_audio += part_audio
+    if not audio_parts:
+        return None
 
-    buf = BytesIO()
-    final_audio.export(buf, format="mp3")
-    return buf.getvalue()
+    return merge_audio_files(audio_parts)
 
 # -----------------------------------------
 # TRANSLATION
@@ -198,29 +215,25 @@ if submit:
     max_words = word_limit_map[marks]
 
     prompt = f"""
-You are Juggie — a super friendly student who explains things casually like a best friend during last-minute exam revision.
+You are Juggie — a friendly student who explains concepts casually like helping a best friend before an exam.
 
 Subject: {subject}
 Marks: {marks}
 Language: {language}
 Question: {question}
 
-Now write a {marks}-mark answer ONLY in {language}.
+Write an answer for {marks} marks ONLY in {language}.
 
 STYLE RULES:
-- Sound like a friendly student, not a teacher.
-- Very simple, casual, everyday language.
-- No textbook tone.
-- Use funny or relatable examples students use while studying.
-- No formal definitions unless needed.
-- No long complex sentences.
-- Explain like you're helping a friend just before the exam.
-- Add small real-life comparisons.
-- Avoid brackets.
-- DO NOT exceed {max_words} words.
-- Use ONLY {language} script (except common English tech words like “data”, “mobile”, “network”, etc.).
+- Casual, friendly, student-like tone
+- Simple everyday language
+- No textbook tone
+- Small funny or relatable examples
+- Avoid brackets
+- Max {max_words} words
+- Use only {language} script except basic English tech words
 
-Start the answer directly. No headings, no introduction.
+Begin answer directly. No headings.
 """
 
     with st.spinner("Thinking…"):
@@ -232,7 +245,7 @@ Start the answer directly. No headings, no introduction.
 
     final_answer = translate(raw_answer, language)
 
-    # Cut to max words
+    # Trim to word limit
     words = final_answer.split()
     final_answer = " ".join(words[:max_words])
 
@@ -241,18 +254,17 @@ Start the answer directly. No headings, no introduction.
 
     st.divider()
 
-    # AUDIO
     voice_id = voice_map.get(language, "en-IN-eashwar")
 
     with st.spinner("Generating full audio…"):
-        merged_audio = make_full_voice(final_answer, voice_id)
+        full_audio = make_full_voice(final_answer, voice_id)
 
-    if merged_audio:
+    if full_audio:
         st.success("🎧 Full audio is ready!")
-        st.audio(merged_audio, format="audio/mp3")
+        st.audio(full_audio, format="audio/mp3")
 
-        b64 = base64.b64encode(merged_audio).decode()
+        b64 = base64.b64encode(full_audio).decode()
         st.markdown(
-            f'<a href="data:audio/mp3;base64,{b64}" download="Juggie_full_audio.mp3">🎧 Download Full Audio</a>',
+            f'<a href="data:audio/mp3;base64,{b64}" download="Juggie_full_audio.mp3">Download Full Audio</a>',
             unsafe_allow_html=True
         )

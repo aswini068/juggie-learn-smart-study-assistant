@@ -3,4 +3,3 @@ google-generativeai
 murf
 requests
 deep-translator
-pydub
