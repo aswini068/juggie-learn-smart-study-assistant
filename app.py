@@ -6,12 +6,9 @@ import requests
 import base64
 import re
 import time
-import subprocess
-import tempfile
-import os
 
 # -----------------------------------------
-# API CONFIG
+# LOAD API KEYS FROM STREAMLIT SECRETS
 # -----------------------------------------
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 MURF_API_KEY = st.secrets["MURF_API_KEY"]
@@ -104,8 +101,7 @@ def split_into_sentences(text):
 
 def build_safe_chunks(text, limit=2500):
     sentences = split_into_sentences(text)
-    chunks = []
-    current = ""
+    chunks, current = [], ""
 
     for sentence in sentences:
         if len(current) + len(sentence) + 1 <= limit:
@@ -127,53 +123,30 @@ def murf_tts_chunk(text, voice_id):
     text = clean_text(text)
     for attempt in range(3):
         try:
-            res = murf_client.text_to_speech.generate(
+            response = murf_client.text_to_speech.generate(
                 text=text,
                 voice_id=voice_id,
                 format="MP3"
             )
-            url = res.audio_file
-            audio = requests.get(url, timeout=25).content
+            url = response.audio_file
+            audio = requests.get(url, timeout=20).content
             return audio
         except Exception:
-            time.sleep(1)
+            time.sleep(1)  # retry delay
     return None
 
 # -----------------------------------------
-# AUDIO MERGE USING FFMPEG (NO PYDUB)
+# AUDIO MERGE WITHOUT FFMPEG (SAFE FOR MP3)
 # -----------------------------------------
 
-def merge_audio_files(audio_bytes_list):
-    with tempfile.TemporaryDirectory() as tmpdir:
-        input_files = []
-
-        # Save each chunk to temporary MP3 files
-        for i, audio_bytes in enumerate(audio_bytes_list):
-            path = os.path.join(tmpdir, f"part{i}.mp3")
-            with open(path, "wb") as f:
-                f.write(audio_bytes)
-            input_files.append(path)
-
-        # File list for ffmpeg
-        list_path = os.path.join(tmpdir, "list.txt")
-        with open(list_path, "w") as f:
-            for fpath in input_files:
-                f.write(f"file '{fpath}'\n")
-
-        merged_output = os.path.join(tmpdir, "merged.mp3")
-
-        subprocess.run(
-            ["ffmpeg", "-y", "-f", "concat", "-safe", "0",
-             "-i", list_path, "-acodec", "copy", merged_output],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-
-        with open(merged_output, "rb") as f:
-            return f.read()
+def merge_audio_files(audio_list):
+    merged = b""
+    for audio in audio_list:
+        merged += audio  # simple MP3 frame concatenation
+    return merged
 
 # -----------------------------------------
-# make_full_voice (uses Murf + ffmpeg)
+# MAKE FULL AUDIO (MANY CHUNKS)
 # -----------------------------------------
 
 def make_full_voice(text, voice_id):
@@ -217,7 +190,7 @@ if submit:
     max_words = word_limit_map[marks]
 
     prompt = f"""
-You are Juggie — a friendly student who explains concepts casually like helping a best friend before an exam.
+You are Juggie — a friendly student who explains things casually like helping a best friend before an exam.
 
 Subject: {subject}
 Marks: {marks}
@@ -230,12 +203,13 @@ STYLE RULES:
 - Casual, friendly, student-like tone
 - Simple everyday language
 - No textbook tone
-- Small funny or relatable examples
-- Avoid brackets
-- Max {max_words} words
-- Use only {language} script except basic English tech words
+- Funny or relatable student-style examples
+- Short, clear, and easy explanations
+- Avoid brackets entirely
+- Maximum {max_words} words
+- Use ONLY {language} script (except common English tech words)
 
-Begin answer directly. No headings.
+Start the answer directly. No headings.
 """
 
     with st.spinner("Thinking…"):
@@ -247,22 +221,20 @@ Begin answer directly. No headings.
 
     final_answer = translate(raw_answer, language)
 
-    # Trim to word limit
-    words = final_answer.split()
-    final_answer = " ".join(words[:max_words])
+    # Word limit cut
+    final_answer = " ".join(final_answer.split()[:max_words])
 
     st.subheader(f"📘 Juggie Says ({language})")
     st.write(final_answer)
-
     st.divider()
 
     voice_id = voice_map.get(language, "en-IN-eashwar")
 
-    with st.spinner("Generating full audio…"):
+    with st.spinner("Generating audio…"):
         full_audio = make_full_voice(final_answer, voice_id)
 
     if full_audio:
-        st.success("🎧 Full audio is ready!")
+        st.success("🎧 Audio ready!")
         st.audio(full_audio, format="audio/mp3")
 
         b64 = base64.b64encode(full_audio).decode()
