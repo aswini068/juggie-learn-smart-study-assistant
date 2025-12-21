@@ -76,7 +76,7 @@ submit = st.button("✨ Generate Answer")
 
 def ask_gemini(prompt):
     try:
-        model = genai.GenerativeModel("gemini-2.0")
+        model = genai.GenerativeModel("gemini-2.5-flash-lite")
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
